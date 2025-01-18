@@ -5,13 +5,15 @@ enum Value:
   case Bool(value: Boolean)
   case Fun(param: String, body: Expr, env: Env)
 
-class Env private (private val env: List[Env.Binding]):
-  def lookup(name: String) = env
-    .find(_.name == name)
-    .map(_.value)
-    .getOrElse(sys.error(s"Missing binding: $name"))
+private class Env private (env: List[Env.Binding]):
+  def lookup(name: String) =
+    env
+      .find(_.name == name)
+      .flatMap(binding => Option.fromNullable(binding.value))
+      .getOrElse(sys.error(s"Missing binding: $name"))
 
-  def bind(name: String, value: Value) = Env(Env.Binding(name, value) :: env)
+  def bind(name: String, value: Value | Null) =
+    Env(Env.Binding(name, value) :: env)
 
   def set(name: String, value: Value) =
     env
@@ -19,8 +21,8 @@ class Env private (private val env: List[Env.Binding]):
       .map(_.value = value)
 
 object Env:
-  private case class Binding(name: String, var value: Value)
-  def empty: Env = Env(List.empty)
+  private case class Binding(name: String, var value: Value | Null)
+  val empty: Env = Env(List.empty)
 
 def typeError(term: String) = sys.error(s"Type error when interpreting $term")
 

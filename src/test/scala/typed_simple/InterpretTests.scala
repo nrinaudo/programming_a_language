@@ -7,9 +7,9 @@ import tests.InterpreterTests
 class InterpretTests extends InterpreterTests:
   def run(expr: Expr) =
     val result = for
-      typing    <- typecheck(expr, TypeEnv.empty)
+      typing    <- typeCheck(expr, TypeEnv.empty)
       typedExpr <- typing.cast(TypeRepr.Num)
-      value     <- interpret(typedExpr, Env.empty)
+      value     <- interpret(typedExpr.expr, Env.empty)
     yield value
 
     result match

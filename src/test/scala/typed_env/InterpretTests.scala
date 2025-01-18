@@ -6,9 +6,9 @@ import tests.InterpreterTests
 class InterpretTests extends InterpreterTests:
   override def run(expr: Expr) =
     val result = for
-      typing    <- typecheck(expr, TypeEnv.Empty)
+      typing    <- typeCheck(expr, TypeEnv.Empty)
       typedExpr <- typing.cast(TypeRepr.Num)
-    yield interpret(typedExpr, Env.Empty)
+    yield interpret(typedExpr.expr, Env.Empty)
 
     result match
       case Right(i)  => i

@@ -1,10 +1,10 @@
 package tests
 
 import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.matchers.should.Matchers
+import org.scalatest.matchers.should.Matchers.*
 import untyped.Expr
 
-abstract class InterpreterTests extends AnyFunSuite with Matchers:
+abstract class InterpreterTests extends AnyFunSuite:
   def run(expr: Expr): Int
 
   def runTest(expr: Expr, expected: Int) =

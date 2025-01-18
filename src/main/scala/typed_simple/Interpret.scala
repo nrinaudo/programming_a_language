@@ -14,35 +14,34 @@ type Value[X] = X match
 // - Environment -------------------------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------------------------------------
 private class Env private (env: List[Env.Binding]):
-  def bind[A <: Type](variable: Variable[A], value: Value[A]) = Env(
-    Env.Binding(variable.name, Env.TypedValue(value, variable.tpe)) :: env
-  )
-
-  // That unfortunately cannot be replaced with `bind(name, null)`, because match types are fiddly.
-  def init[A <: Type](variable: Variable[A]) =
-    Env(Env.Binding(variable.name, null) :: env)
-
-  private def find(name: String): Either[String, Env.Binding] =
-    env.find(_.name == name).toRight(s"Binding not found: $name")
-
-  def set[A <: Type](variable: Variable[A], value: Value[A]) =
-    find(variable.name)
-      .map: binding =>
-        binding.value = Env.TypedValue(value, variable.tpe)
-        this
-
-  def lookup[A <: Type](variable: Variable[A]) =
+  def lookup[A <: Type](name: String, repr: TypeRepr[A]) =
     for
-      binding <- find(variable.name)
-      value   <- binding.value.cast(variable.tpe)
+      Env.Binding(_, v) <- find(name)
+      rawValue          <- Option.fromNullable(v).toRight(s"Expected a $repr but found null")
+      value             <- rawValue.as(repr)
     yield value
 
+  def bind[A <: Type](name: String, value: TypedValue[A] | Null): Env =
+    Env(Env.Binding(name, value) :: env)
+
+  private def find(name: String) =
+    env
+      .find(_.name == name)
+      .toRight(s"Binding not found: $name")
+
+  def set[A <: Type](name: String, value: TypedValue[A]) =
+    find(name)
+      .map(_.value = value)
+
 object Env:
-  private case class Binding(name: String, var value: TypedValue[?])
-  private case class TypedValue[A <: Type](value: Value[A], repr: TypeRepr[A]):
-    def cast[B <: Type](to: TypeRepr[B]): Either[String, Value[B]] = repr.cast(value, to)
+  private case class Binding(name: String, var value: TypedValue[?] | Null)
 
   val empty: Env = Env(List.empty)
+
+case class TypedValue[A <: Type](value: Value[A], repr: TypeRepr[A]):
+  def as[B <: Type](to: TypeRepr[B]): Either[String, Value[B]] =
+    Eq.from(repr, to)
+      .map(_.congruence[Value].cast(value))
 
 // - Interpretation ----------------------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------------------------------------
@@ -64,23 +63,27 @@ def runCond[X <: Type](pred: TypedExpr[Type.Bool], onT: TypedExpr[X], onF: Typed
     case true  => interpret(onT, e)
     case false => interpret(onF, e)
 
-def runLet[X <: Type, Y <: Type](variable: Variable[X], value: TypedExpr[X], body: TypedExpr[Y], e: Env) =
+def runLet[X <: Type, Y <: Type](name: String, value: TypedExpr[X], vType: TypeRepr[X], body: TypedExpr[Y], e: Env) =
   for
     value <- interpret(value, e)
-    body  <- interpret(body, e.bind(variable, value))
+    body  <- interpret(body, e.bind(name, TypedValue(value, vType)))
   yield body
 
-def runLetRec[X <: Type, Y <: Type](variable: Variable[X], value: TypedExpr[X], body: TypedExpr[Y], e: Env) =
-  val eʹ = e.init(variable)
+def runRef[X <: Type](name: String, rType: TypeRepr[X], e: Env) =
+  e.lookup(name, rType)
+
+def runLetRec[X <: Type, Y <: Type](name: String, value: TypedExpr[X], vType: TypeRepr[X], body: TypedExpr[Y], e: Env) =
+  val eʹ = e.bind(name, null)
 
   for
     value <- interpret(value, eʹ)
-    _     <- eʹ.set(variable, value)
+    _     <- eʹ.set(name, TypedValue(value, vType))
     body  <- interpret(body, eʹ)
   yield body
 
-def runFun[X <: Type, Y <: Type](param: Variable[X], body: TypedExpr[Y], e: Env) =
-  Right((x: Value[X]) => interpret(body, e.bind(param, x)))
+def runFun[X <: Type, Y <: Type](param: String, pType: TypeRepr[X], body: TypedExpr[Y], e: Env) =
+  Right: (x: Value[X]) =>
+    interpret(body, e.bind(param, TypedValue(x, pType)))
 
 def runApply[X <: Type, Y <: Type](fun: TypedExpr[X -> Y], arg: TypedExpr[X], e: Env) =
   for
@@ -91,14 +94,14 @@ def runApply[X <: Type, Y <: Type](fun: TypedExpr[X -> Y], arg: TypedExpr[X], e:
 
 def interpret[A <: Type](expr: TypedExpr[A], e: Env): Either[String, Value[A]] =
   expr match
-    case Bool(value)                   => Right(value)
-    case Num(value)                    => Right(value)
-    case Add(lhs, rhs)                 => runAdd(lhs, rhs, e)
-    case Gt(lhs, rhs)                  => runGt(lhs, rhs, e)
-    case Cond(pred, onT, onF)          => runCond(pred, onT, onF, e)
-    case Let(variable, value, body)    => runLet(variable, value, body, e)
-    case LetRec(variable, value, body) => runLetRec(variable, value, body, e)
-    case Ref(variable)                 => e.lookup(variable)
-    case Apply(fun, arg)               => runApply(fun, arg, e)
+    case Bool(value)                      => Right(value)
+    case Num(value)                       => Right(value)
+    case Add(lhs, rhs)                    => runAdd(lhs, rhs, e)
+    case Gt(lhs, rhs)                     => runGt(lhs, rhs, e)
+    case Cond(pred, onT, onF)             => runCond(pred, onT, onF, e)
+    case Let(name, value, vType, body)    => runLet(name, value, vType, body, e)
+    case LetRec(name, value, vType, body) => runLetRec(name, value, vType, body, e)
+    case Ref(name, rType)                 => runRef(name, rType, e)
+    case Apply(fun, arg)                  => runApply(fun, arg, e)
     // I really wish the runtime cast wasn't necessary, but: https://github.com/scala/scala3/issues/21391
-    case Fun(param, body) => runFun(param, body, e).map(_.asInstanceOf[Value[A]])
+    case Fun(param, pType, body) => runFun(param, pType, body, e).map(_.asInstanceOf[Value[A]])

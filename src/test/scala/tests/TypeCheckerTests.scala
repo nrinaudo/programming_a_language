@@ -1,11 +1,11 @@
 package tests
 
 import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.matchers.should.Matchers
+import org.scalatest.matchers.should.Matchers.*
 import untyped.{Expr, Type}
 import untyped.Expr.*
 
-abstract class TypecheckerTests extends AnyFunSuite with Matchers:
+abstract class TypeCheckerTests extends AnyFunSuite:
   def run(expr: Expr): Type
 
   def runTest(expr: Expr, expected: Type) =

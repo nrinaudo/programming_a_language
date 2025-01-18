@@ -4,15 +4,6 @@ import untyped.*
 
 // - Typed expressions -------------------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------------------------------------
-// Stores the name and type of a variable.
-// It might seem counter-intuitive that we need to store type information in a type-checked representation: after all
-// we've already checked everything, so why bother carry this additional information?
-//
-// It turns out to be necessary when actually interpreting a type-checked expression: whenever interacting with
-// variables, we need to make sure that the value we get is of the expected type. This can only be done if we know
-// what the expected type is at runtime.
-case class Variable[T <: Type](name: String, tpe: TypeRepr[T])
-
 // Type-checked version of `Expr`: this guarantees that all operations are type-correct. It is now impossible to
 // write a conditional statement that returns a different type depending on the branch it takes, or to add ints and
 // booleans.
@@ -40,20 +31,24 @@ enum TypedExpr[A <: Type]:
       onF: TypedExpr[A]
   ) extends TypedExpr[A]
   case Let[A <: Type, B <: Type](
-      variable: Variable[A],
+      name: String,
       value: TypedExpr[A],
+      vType: TypeRepr[A],
       body: TypedExpr[B]
   ) extends TypedExpr[B]
   case LetRec[A <: Type, B <: Type](
-      variable: Variable[A],
+      name: String,
       value: TypedExpr[A],
+      vType: TypeRepr[A],
       body: TypedExpr[B]
   ) extends TypedExpr[B]
   case Ref[A <: Type](
-      variable: Variable[A]
+      name: String,
+      rType: TypeRepr[A]
   ) extends TypedExpr[A]
   case Fun[A <: Type, B <: Type](
-      param: Variable[A],
+      param: String,
+      pType: TypeRepr[A],
       body: TypedExpr[B]
   ) extends TypedExpr[A -> B]
   case Apply[A <: Type, B <: Type](

@@ -62,7 +62,7 @@ enum TypedExpr[X <: Type, Γ <: Tuple]:
   ) extends TypedExpr[Y, Γ]
 
   // ​Γ |- Ref name : Γ(name)
-  case Ref[X <: Type, Γ <: NonEmptyTuple](loc: Elem[X, Γ]) extends TypedExpr[X, Γ]
+  case Ref[X <: Type, Γ <: NonEmptyTuple](path: Elem[X, Γ]) extends TypedExpr[X, Γ]
 
   //     Γ[param <- X] |- body : Y
   // ----------------------------------
