@@ -1,4 +1,4 @@
-package typed_ast
+package typed_env
 
 enum Type:
   case Num
@@ -12,3 +12,4 @@ type ->[X <: Type, Y <: Type] = Type.Fun[X, Y]
 object Type:
   type Num  = Type.Num.type
   type Bool = Type.Bool.type
+

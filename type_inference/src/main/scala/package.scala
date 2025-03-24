@@ -2,6 +2,107 @@ package type_inference
 
 import Expr.*
 
+// - AST ---------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+enum Expr[T]:
+  case Bool(value: Boolean)
+  case Num(value: Int)
+  case Gt(lhs: Expr[T], rhs: Expr[T])
+  case Add(lhs: Expr[T], rhs: Expr[T])
+  case Cond(pred: Expr[T], onT: Expr[T], onF: Expr[T])
+  case Let(name: String, value: Expr[T], vType: T, body: Expr[T])
+  case LetRec(name: String, value: Expr[T], vType: T, body: Expr[T])
+  case Ref(name: String)
+  case Fun(param: String, pType: T, body: Expr[T])
+  case Apply(fun: Expr[T], arg: Expr[T])
+
+// - Type --------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+enum Type:
+  case Num
+  case Bool
+  case Fun[X <: Type, Y <: Type](from: X, to: Y)
+  def ->(t: Type): Type = Fun(this, t)
+
+object Type:
+  type Num  = Type.Num.type
+  type Bool = Type.Bool.type
+
+// - Inferred types ----------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+enum TypeInf:
+  case Num
+  case Bool
+  case Fun(from: TypeInf, to: TypeInf)
+  case Var(index: Int)
+  def ->(t: TypeInf): TypeInf = Fun(this, t)
+
+object TypeInf:
+  def from(tpe: Type): TypeInf = tpe match
+    case Type.Num       => TypeInf.Num
+    case Type.Bool      => TypeInf.Bool
+    case Type.Fun(a, b) => from(a) -> from(b)
+
+// - Inference state ---------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+class InfState:
+  var currentVar = 0
+  val ϕ          = collection.mutable.Map.empty[Int, TypeInf]
+
+  def toInf(tpe: Option[Type]) =
+    tpe
+      .map(TypeInf.from)
+      .getOrElse(freshVar)
+
+  def freshVar: TypeInf =
+    val v = TypeInf.Var(currentVar)
+    currentVar += 1
+    v
+
+  def getType(t: TypeInf): Either[String, Type] = t match
+    case TypeInf.Num  => Right(Type.Num)
+    case TypeInf.Bool => Right(Type.Bool)
+    case TypeInf.Fun(x, y) =>
+      for
+        x <- getType(x)
+        y <- getType(y)
+      yield x -> y
+    case TypeInf.Var(i) =>
+      ϕ.get(i) match
+        case None     => Left(s"Failed to infer type for variable $$$i")
+        case Some(t2) => getType(t2)
+
+  def occurs(i: Int, x: TypeInf): Boolean = x match
+    case TypeInf.Bool      => false
+    case TypeInf.Num       => false
+    case TypeInf.Fun(x, y) => occurs(i, x) || occurs(i, y)
+    case TypeInf.Var(`i`)  => true
+    case TypeInf.Var(j)    => ϕ.get(j).map(occurs(i, _)).getOrElse(false)
+
+  def assign(i: Int, x: TypeInf) =
+    if occurs(i, x) then Left(s"Infinite type $x")
+    else
+      ϕ(i) = x
+      Right(())
+
+  def unifyVar(i: Int, x: TypeInf) =
+    ϕ.get(i) match
+      case None    => assign(i, x)
+      case Some(y) => unify(x, y)
+
+  def unify(t1: TypeInf, t2: TypeInf): Either[String, Unit] =
+    (t1, t2) match
+      case (TypeInf.Num, TypeInf.Num)   => Right(())
+      case (TypeInf.Bool, TypeInf.Bool) => Right(())
+      case (TypeInf.Fun(x1, y1), TypeInf.Fun(x2, y2)) =>
+        for
+          _ <- unify(x1, x2)
+          _ <- unify(y1, y2)
+        yield ()
+      case (TypeInf.Var(i), x) => unifyVar(i, x)
+      case (x, TypeInf.Var(i)) => unifyVar(i, x)
+      case _                   => Left(s"Failed to unify $t1 and $t2")
+
 // - Type checking result ----------------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------------------------------------
 case class Typing(expr: Expr[TypeInf], t: TypeInf)
@@ -25,7 +126,6 @@ object TypeEnv:
 
 // - Type inference ----------------------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------------------------------------
-
 def infer(
     expr: Expr[Option[Type]],
     Γ: TypeEnv
@@ -134,7 +234,6 @@ def infer(
     yield Fun(param, x, body)
 
   def substApply(fun: Expr[TypeInf], arg: Expr[TypeInf]) =
-    val y = state.freshVar
     for
       arg <- substitute(arg)
       fun <- substitute(fun)

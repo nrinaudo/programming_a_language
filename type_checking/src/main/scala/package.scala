@@ -2,6 +2,35 @@ package type_checking
 
 import Expr.*
 
+// - AST ---------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+enum Expr:
+  case Bool(value: Boolean)
+  case Num(value: Int)
+  case Gt(lhs: Expr, rhs: Expr)
+  case Add(lhs: Expr, rhs: Expr)
+  case Cond(pred: Expr, onT: Expr, onF: Expr)
+  case Let(name: String, value: Expr, body: Expr)
+  case LetRec(name: String, value: Expr, vType: Type, body: Expr)
+  case Ref(name: String)
+  case Fun(param: String, pType: Type, body: Expr)
+  case Apply(fun: Expr, arg: Expr)
+
+// - Types -------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+enum Type:
+  case Num
+  case Bool
+  case Fun[X <: Type, Y <: Type](from: X, to: Y)
+
+  def ->(other: Type): Type = Fun(this, other)
+
+type ->[X <: Type, Y <: Type] = Type.Fun[X, Y]
+
+object Type:
+  type Num  = Type.Num.type
+  type Bool = Type.Bool.type
+
 // - Type environment --------------------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------------------------------------
 class TypeEnv private (env: List[TypeEnv.Binding]):
